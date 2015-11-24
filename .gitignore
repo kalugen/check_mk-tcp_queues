@@ -46,3 +46,6 @@ Temporary Items
 # Sublime Text project files
 *.sublime-project
 *.sublime-workspace
+
+# File di swap di VIM
+*.swp
