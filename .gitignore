@@ -49,3 +49,6 @@ Temporary Items
 
 # File di swap di VIM
 *.swp
+
+# Ignora i build artifacts
+.cmkpackage.json
