@@ -1,0 +1,5 @@
+#!/bin/bash
+
+# The output section MUST match the filename of the check on the server
+echo '<<<tcp_queues>>>'
+ss -n state established | grep -v Recv

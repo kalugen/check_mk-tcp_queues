@@ -1,0 +1,122 @@
+#!/usr/bin/python
+# -*- encoding: utf-8; py-indent-offset: 2 -*-
+
+import socket,struct
+
+def matches_ip(address1,address2):
+  # Caso macelloso, dobbiamo verificare se l'indirizzo è in una rete
+  if('/' in address1):
+    # Spiegone procedimento:
+    # * address2.split('.') restituisce un array di 4 numeri presi dalla stringa
+    #                  dell'indirizzo in notazione "dotted decimal", ad esempio:
+    #                  "10.1.2.45"  => [ "10", "1", "2", "45"]
+    #
+    # * '%02x' % int(x) applicato ad ogni elemento dell'array di 4 numeri "converte"
+    #                   in notazione esadecimale, con padding a 2 caratteri usando "0":
+    #                  [ "10", "1", "2", "45"] => ["0a", "01", "02", "2d"]
+    #
+    # * ''.join(["0a", "01", "02", "2d"]) => "0a01022d"
+    #
+    # * int("0a01022d",16) è una forma di int(str,base) e converte in intero decimale
+    #                      una stringa, ragionando in base 16 => 167838253
+    ipaddr = int(''.join([ '%02x' % int(x) for x in address2.split('.') ]), 16)
+
+    netstr, bits = address1.split('/')
+
+    # Idem C.S.
+    netaddr = int(''.join([ '%02x' % int(x) for x in netstr.split('.') ]), 16)
+
+    # Ogni numero è in realtà codificato internamente come una seguenza di bit
+    # e "<<"" è l'operatore "bitwise left shift" che sposta verso sinistra i bit
+    # del numero aggiungendo degli 0 nelle posizioni meno significative.
+    #
+    # Ad esempio (rappresento in hex che è più breve):
+    #    0xffffffff << 8  => 0xffffffff00
+    #    0xffffffff << 16 => 0xffffffff0000
+    #
+    # Nel caso dei network address, il valore del CIDR rappresenta quanti bit a
+    # sinistra sono da mettere a "0" nella netmask, il che ci dice che:
+    # * /0  deve dare 0x00000000
+    # * /32 deve dare 0xffffffff
+    #
+    # Per ottenere i "bit" di cui shiftare il valore base della maschera 0xffffffff
+    # dobbiamo quindi fare 32 - CIDR
+    #
+    # Infine, dobbiamo ottenere un numero di 4 bytes e semplicemente lo otteniamo
+    # con un'operazione di "and binario" sui bit (diverso dall'"and" logico). E'
+    # come se con l'operazione "tagliassimo" via i bit più significativi per riportare
+    # il tutto ad una dimensione di 4 bytes:
+    # * 0xffffffff00   & 0xffffffff = 0xffffff00
+    # * 0xffffffff0000 & 0xffffffff = 0xffff0000
+    mask = (0xffffffff << (32 - int(bits))) & 0xffffffff
+
+    # Ora che dalle stringhe siamo passati correttamente ai numeri che rappresentavano
+    # possiamo usare "&" per verificare l'assunto fondamentale del networking IP:
+    # per dire che un indirizzo appartiene ad una certa rete con una certa netmask,
+    # facendo "&" tra indirizzo e mask e tra rete e mask dobbiamo avere lo stesso risultato
+    return (ipaddr & mask) == (netaddr & mask)
+
+  else:
+    # Caso banale, non è un network address ma solo un IP da confrontare
+    return address1 == address2
+
+def matches_address_port(address,port,socket_rule):
+      # Sia IP che porta nella regola possono essere definiti come "*" che
+      # interpretiamo come "qualunque".
+      #
+      # In pratica, ragioniamo così:
+      # la porta del socket matcha la regola se:
+      #    la porta della regola è "qualunque porta" OPPURE la porta della regola e quella del socket matchano
+      port_matches = (socket_rule['port'] == 'ANY' or socket_rule['port'] == port)
+
+      # l'address del socket matcha la regola se:
+      #    l'address della regola è "qualunque address" OPPURE l'address della regola e quello del socket matchano
+      ip_matches = (socket_rule['address'] == 'ANY' or matches_ip(socket_rule['address'], address))
+
+      # Entrambe devono essere vere, quindi restituiamo l'and logico tra le due
+      return (port_matches and ip_matches)
+
+def socket_dict_to_string(socket_dict):
+  socket_string = ":".join([
+    socket_dict['location'],
+    socket_dict['address'],
+    socket_dict['port']
+  ])
+
+  return socket_string
+
+def socket_string_to_dict(socket_string):
+  location, address, port = socket_string.split(":")
+
+  socket_dict = {
+    'location' : location,
+    'address'  : address,
+    'port'     : port
+  }
+
+  return socket_dict
+
+def split_addr_port(socket_string):
+  # Compila e salva la regex - supporta sia IPv4 che IPv6
+  addr_port_rex = get_regex(":(\d{1,6})$")
+
+  # Restituisce i valori di addr e port splittando
+  return re.split(addr_port_rex,socket_string)[0:2]
+
+def check_integer(prefix,metric_name,metric,warn,crit):
+    rc = 3
+    output = prefix
+
+    if metric >= crit:
+        rc = 2
+        output += ": %d(!!)" % metric
+    elif metric >= warn:
+        rc = 1
+        output += ": %d(!)" % metric
+    else:
+        rc = 0
+        output += ": %d" % metric
+
+    perfdata = (metric_name,str(metric),warn,crit,None,None)
+
+    return (rc,output,perfdata)

@@ -1,0 +1,33 @@
+title: Usage of queues on TCP
+agents: os
+catalog: os/kernel
+license: GPL
+distribution: MIS
+description:
+ This check monitors the usage of queues on TCP.
+
+item:
+ a queues
+
+examples:
+ # Set default levels for all zones
+ tcp_queues_defaults["queues_levels"] = (90.0, 95.0)
+
+ check_parameters = [
+    # Hosts with tag "production" get 85/95
+    ( {'queues_levels': (85.0, 95.0), 'critical_state': None}, ['production', ], ALL_HTCPTS, ALL_SERVICES ),
+ ]
+
+perfdata:
+ queues usage levels are saved into the rrd database.
+
+inventory:
+ This check supports inventory.
+
+[parameters]
+parameters (dict): this check supports the new parameters dictionary format.
+
+{"queues_levels"}: Warning and critical queues usage levels
+
+[configuration]
+tcp_queues_defaults: Default levels for zone cpu and memory usage levels

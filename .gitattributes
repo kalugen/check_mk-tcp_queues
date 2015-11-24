@@ -1,0 +1,32 @@
+# Auto detect text files and perform LF normalization
+* text=auto
+
+*.sh eol=lf
+*.py eol=lf
+*.php eol=lf
+*.js eol=lf
+*.css eol=lf
+
+*.txt eol=crlf
+*.bat eol=crlf
+*.cmd eol=crlf
+*.ini eol=crlf
+
+*.exe binary
+*.msi binary
+
+
+# Custom for Visual Studio
+*.cs     diff=csharp
+
+# Standard to msysgit
+*.doc	 diff=astextplain
+*.DOC	 diff=astextplain
+*.docx diff=astextplain
+*.DOCX diff=astextplain
+*.dot  diff=astextplain
+*.DOT  diff=astextplain
+*.pdf  diff=astextplain
+*.PDF	 diff=astextplain
+*.rtf	 diff=astextplain
+*.RTF	 diff=astextplain

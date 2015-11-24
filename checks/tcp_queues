@@ -1,0 +1,177 @@
+#!/usr/bin/python
+# -*- encoding: utf-8; py-indent-offset: 2 -*-
+
+# Example input:
+#
+# 0      0                      127.0.0.1:58841                 127.0.0.1:4730
+# 0      26                     10.1.81.33:6557                 10.1.81.32:41042
+# 0      0                      127.0.0.1:54131                 127.0.0.1:4730
+# 0      0                      127.0.0.1:4730                  127.0.0.1:51370
+# 0      0                      127.0.0.1:60367                 127.0.0.1:4730
+# 0      0                      127.0.0.1:4730                  127.0.0.1:57837
+# 0      0                      127.0.0.1:4730                  127.0.0.1:46697
+# 0      0                      127.0.0.1:4730                  127.0.0.1:43906
+# 0      0                      127.0.0.1:50432                 127.0.0.1:4730
+#
+# Columns:
+# Recv-Q Send-Q                 Local Address                   Remote Address
+
+
+# Default parameters values - support for wATO check paramaters
+factory_settings["tcp_queues_defaults"] = {
+  "socket_count_levels" : (400000,800000),
+  "recv_queue_levels"   : (400000,800000),
+  "send_queue_levels"   : (400000,800000),
+  "average_minutes"     :  15
+}
+
+# Desired items - support for WATO inventory rules. When the inventory
+# function will get called, it will be populated with the appropriate rules.
+desired_tcp_queues = []
+
+# Inventory function
+def inventory_tcp_queues(info):
+  # Initialize some lists
+  relevant_socket_rules = []
+  inventory = []
+  items = []
+
+  # Get every rule matching the current host or its tags
+  for rule in desired_tcp_queues:
+    # 1. Get all rules
+    taglist, hostlist = rule[1:3]
+
+    # 2. Skip the rules that do not match the current host or tags
+    if not hosttags_match_taglist(tags_of_host(g_hostname), taglist) \
+      or not in_extraconf_hostlist(hostlist, g_hostname):
+        continue
+
+    # 3. append all items from this rule
+    for socket_rule in rule[0]:
+      relevant_socket_rules.append(socket_rule.get("desired_socket",[]))
+
+  # Now, process the info text from the agent
+  for line in info:
+    # Parsiamo i socket elencati nelle righe dell'info
+    local_address,local_port   = split_addr_port(line[2])
+    remote_address,remote_port = split_addr_port(line[3])
+
+    # Le regole possono riguardare o il socket locale o quello remoto
+    for socket_to_match in relevant_socket_rules:
+      if(socket_to_match['location'] == 'L'):
+        address,port = (local_address,local_port)
+
+      elif(socket_to_match['location'] == 'R'):
+        address,port = (remote_address,remote_port)
+
+      else:
+        # *Should* not ever happen, only manual intervention on check_mk's conf.
+        # files or a bug in WATO would make this happen.
+        return None
+
+      if matches_address_port(address,port,socket_to_match):
+        # Se non l'abbiamo già aggiunto, aggiunge l'item all'elenco degli items
+        new_item = socket_dict_to_string(socket_to_match)
+
+        if(new_item not in items):
+          items.append(new_item)
+
+  # Infine, crea l'inventory nel formato che serve a CheckMK
+  for item in items:
+    inventory.append((item,{}))
+
+  # Finally, return the populated array with all of our items
+  return inventory
+
+# Check function
+def check_tcp_queues(item, params, info):
+  # Parsing dei parametri
+  recv_warn,recv_crit   = params["recv_queue_levels"]
+  send_warn,send_crit   = params["send_queue_levels"]
+  count_warn,count_crit = params["socket_count_levels"]
+  avg_min               = params["average_minutes"]
+
+  now = time.time()
+
+  total_count = 0
+  total_send  = 0
+  total_recv  = 0
+
+  item_dict = socket_string_to_dict(item)
+
+  # Il formato dell'output è:
+  # Send-Q Recv-Q Local-Addr e Remote-Addr
+  #
+  # Quindi, se stiamo cercando i socket in base a indirizzo locale, ci serve la
+  # 3a colonna, altrimenti consideriamo la 4a
+  addr_column_idx = 2 if(item_dict['location'] == 'L') else 3
+
+  # Process the info text from the agent
+  for line in info:
+    recv = saveint(line[0])
+    send = saveint(line[1])
+    socket_address, socket_port = split_addr_port(line[addr_column_idx])
+
+    # In caso di match con l'item, incrementa i contatori
+    if matches_address_port(socket_address, socket_port, item_dict):
+      total_count += 1
+      total_recv  += recv
+      total_send  += send
+
+  # Get the average over "avg_min" minutes
+  avg_send  = get_average("tcp_queues.%s.send" % item,
+                           now, total_send,  avg_min, initialize_zero = True)
+
+  avg_recv  = get_average("tcp_queues.%s.recv" % item,
+                           now, total_recv,  avg_min, initialize_zero = True)
+
+  avg_count = get_average("tcp_queues.%s.count" % item,
+                           now, total_count, avg_min, initialize_zero = True)
+
+  # Get check result and output for all of the metrics
+  recv_rc, recv_output, recv_perf = check_integer(
+    'Recv-Q (Total)', 'recv', total_recv, recv_warn, recv_crit
+  )
+  send_rc, send_output, send_perf = check_integer(
+    'Send-Q (Total)', 'send', total_send, send_warn, send_crit
+  )
+  count_rc, count_output, count_perf = check_integer(
+    'Socket Count', 'count', total_count, count_warn, count_crit
+  )
+
+  # And for their averages
+  avg_recv_rc, avg_recv_output, avg_recv_perf = check_integer(
+    'Recv-Q (Avg)', 'avg_recv', avg_recv, recv_warn, recv_crit
+  )
+  avg_send_rc, avg_send_output, avg_send_perf = check_integer(
+    'Send-Q (Avg)', 'avg_send', avg_send, send_warn, send_crit
+  )
+  avg_count_rc, avg_count_output, avg_count_perf = check_integer(
+    'Socket Count Avg', 'avg_count', avg_count, count_warn, count_crit
+  )
+
+  # Final RC: worst case among all of the metrics RCs - for now, ignore the avg
+  rc = max([send_rc, recv_rc, count_rc])
+
+  # Populate the full perfdata array, including the moving average of metrics
+  perfdata = [
+    recv_perf,   avg_recv_perf,
+    send_perf,   avg_send_perf,
+    count_perf, avg_count_perf,
+  ]
+
+  output  = recv_output + ", " + send_output + ", " + count_output
+
+  return(rc, output, perfdata)
+
+# Register the check with all its attributes
+check_info['tcp_queues'] = {
+    "check_function"          : check_tcp_queues,
+    "inventory_function"      : inventory_tcp_queues,
+    "service_description"     : "TCP Queues for %s",
+    "has_perfdata"            : True,
+    "group"                   : "tcp_queues_group",
+    "default_levels_variable" : "tcp_queues_defaults",
+    "includes"                : ["tcp_queues.include"]
+}
+
