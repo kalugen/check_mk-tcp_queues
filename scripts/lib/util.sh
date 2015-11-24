@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Setup the work parameters
-SOURCEDIR=$( cd "$( dirname "${BASH_SOURCE[0]}" )/.." && pwd )
+SOURCEDIR=$( cd "$( dirname "${BASH_SOURCE[0]}" )/../.." && pwd )
 OMDBASE="/omd/sites"
 
 # Checks if the site name was passed
@@ -48,23 +48,23 @@ export VERSION
 
 # Now populate files arrays: this is needed for custom package descriptors
 pushd ${SOURCEDIR}/agents > /dev/null
-export AGENTS=$(find . -type f|xargs|sed 's/ /,/g; s/.\//')
+export AGENTS=$(find . -type f|xargs|sed 's/ /,/g; s/.\///g')
 popd > /dev/null
 
-pushd ${SOURCEDIR}/doc > /dev/null
-export CHECKMAN=$(find . -type f|xargs|sed 's/ /,/g')
+pushd ${SOURCEDIR}/docs > /dev/null
+export CHECKMAN=$(find . -type f|xargs|sed 's/ /,/g; s/.\///g')
 popd > /dev/null
 
-pushd ${SOURCEDIR}/doc > /dev/null
-export CHECKS=$(find . -type f|xargs|sed 's/ /,/g')
+pushd ${SOURCEDIR}/checks > /dev/null
+export CHECKS=$(find . -type f|xargs|sed 's/ /,/g; s/.\///g')
 popd > /dev/null
 
 pushd ${SOURCEDIR}/templates > /dev/null
-export PNP_TEMPLATES=$(find . -type f|xargs|sed 's/ /,/g')
+export PNP_TEMPLATES=$(find . -type f|xargs|sed 's/ /,/g; s/.\///g')
 popd > /dev/null
 
 pushd ${SOURCEDIR}/web > /dev/null
-export WEB=$(find . -type f|xargs|sed 's/ /,/g')
+export WEB=$(find . -type f|xargs|sed 's/ /,/g; s/.\///g')
 popd > /dev/null
 
 LOCALSHARE="${OMDBASE}/${SITE}/local/share"

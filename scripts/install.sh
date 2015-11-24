@@ -1,48 +1,41 @@
 #!/bin/bash
 
-# TODO: a lot of things...
-#       1) it should be parametric
-#       2) it should handle server/agent scenarios?
-#       3) it should handle install/uninstall
-#       4) it should detect or ask for paths and user/group instead of hardcoding them
-
-# Setup the work parameters
-SOURCEDIR=$( cd "$( dirname "${BASH_SOURCE[0]}" )/.." && pwd )
-
-CHECKDIR="/usr/share/check_mk/checks"
-DOCDIR="/usr/share/doc/check_mk/checks"
-TEMPLDIR="/usr/share/nagios/html/pnp4nagios/templates"
-PERFDIR="/usr/share/check_mk/web/plugins/perfometer"
-WATODIR="/usr/share/check_mk/web/plugins/wato"
-AGENTPLUGINSDIR="/usr/share/check_mk/agents/plugins"
-
-USER="apache"
-GROUP="nagios"
-
-CHECKNAME=$(basename $(ls -1 ${SOURCEDIR}/checks/* | head -n1))
+. ./lib/util.sh
 
 # Start
-echo "Generic CheckMK checks installation script"
+echo "${NAME} ${VERSION} installation script"
 
-# Copy the files to their destinations
-cp -v ${SOURCEDIR}/checks/${CHECKNAME}*                  ${CHECKDIR}
-cp -v ${SOURCEDIR}/docs/${CHECKNAME}*                    ${DOCDIR}
-cp -v ${SOURCEDIR}/templates/check_mk-${CHECKNAME}*.php           ${TEMPLDIR}
-cp -v ${SOURCEDIR}/perfometer/perfometer-${CHECKNAME}.py ${PERFDIR}
-cp -v ${SOURCEDIR}/wato/${CHECKNAME}_rules.py            ${WATODIR}
-cp -v ${SOURCEDIR}/agent/plugins/${CHECKNAME}            ${AGENTPLUGINSDIR}
+if [[ ${DRYRUN} -gt 0 ]]; then
+    # If we're not in dry-run mode, copy the files to their destinations
+    cp -v ${SOURCEDIR}/checks/*                 ${CHECKDIR}/
+    cp -v ${SOURCEDIR}/docs/*                   ${DOCDIR}/
+    cp -v ${SOURCEDIR}/templates/*              ${TEMPLDIR}/
+    cp -v ${SOURCEDIR}/web/plugins/perfometer/* ${WEBPLUGINSDIR}/perfometer
+    cp -v ${SOURCEDIR}/web/plugins/wato/*       ${WEBPLUGINSDIR}/wato
+    cp -v ${SOURCEDIR}/agent/plugins/*          ${AGENTSDIR}/
+    cp -v ${SOURCEDIR}/agent/*                  ${AGENTSDIR}/plugins
+    
+    # Deploy the package info, making cmk package management aware of our modifications 
+    # NOTE: this depends on the exported variables above
+    ${SOURCEDIRE}/cmk_package.json > ${OMDBASE}/${SITE}/var/check_mk/packages/${NAME}
 
-# Fix the permissions
-for __DIR in ${CHECKDIR} ${DOCDIR} ${TEMPLDIR} ${PERFDIR} ${WATODIR} ${AGENTPLUGINSDIR}; do
-  chown ${USER}:${GROUP} -R ${__DIR}
-  chmod ug+x ${__DIR}
-done
+    # Fix the permissions, since we are running as root
+    chown ${USER}:${GROUP} -R ${LOCALSHARE}
+    
+    # Stop apache and mod_python 
+    omd stop ${SITE} apache
+    
+    # Clear any hanging SysV IPC semaphores while apache is down
+    ipcs -s | grep ${USER} | cut -f2 -d' ' | while read SEMID; do
+      ipcrm -s ${SEMID}
+    done
+    
+    # Start apache and mod_python
+    omd start ${SITE} apache
+else 
+    # If we are in dry-run mode, just display the package descriptor without writing anythng anywhere
+    cat ${SOURCEDIRE}/cmk_package.json
+fi 
 
-# Restart apache mod_python (necessary only if we are installing WATO rules and modules)
-service httpd stop
-ipcs -s | grep apache | cut -f2 -d' ' | while read SEMID; do
-  ipcrm -s ${SEMID}
-done
-service httpd start
 
 exit 0
