@@ -1,0 +1,3 @@
+[submodule "scripts"]
+	path = scripts
+	url = git@mxplgitas01.mbdom.mbgroup.ad:Monitoring/check_mk-deploy_util.git
