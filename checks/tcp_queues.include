@@ -1,6 +1,9 @@
 #!/usr/bin/python
 # -*- encoding: utf-8; py-indent-offset: 2 -*-
 
+# Regexp handling function changed name after 1.2.6
+if("1.2.6" not in check_mk_version):
+  get_regex = regex
 import socket,struct
 
 def matches_ip(address1,address2):
