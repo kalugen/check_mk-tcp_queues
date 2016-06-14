@@ -1,5 +1,7 @@
 # Check TCP Queues
 
+*Versione 1.0.1* 
+
 Il check verifica il numero di pacchetti in coda sui socket TCP, riportando i dati relativi a:
  * code di send
  * code di receive
